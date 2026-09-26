@@ -8,8 +8,10 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { CodeBlock } from './CodeBlock';
 import {
   addMapGeometry,
+  copySvgAsPng,
   fallbackMapStyle,
   frameMap,
   geoJsonBounds,
@@ -216,6 +218,8 @@ function FenceError({
 function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
   const container = useRef<HTMLDivElement>(null);
   const [attempt, setAttempt] = useState(0);
+  const [enlarged, setEnlarged] = useState(false);
+  const closeEnlarged = useCallback(() => setEnlarged(false), []);
   const [error, setError] = useState('');
   const [rendered, setRendered] = useState<{
     bind?: (element: Element) => void;
@@ -259,13 +263,88 @@ function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
   }
   if (!rendered) return fallback;
   return (
+    <>
+      <CodeBlock
+        buttonText="Copy PNG"
+        copyLabel="Copy PNG"
+        text={source}
+        write={() => {
+          const svg = container.current?.querySelector('svg');
+          if (!svg) return Promise.reject(new Error('Diagram is not rendered'));
+          return copySvgAsPng(svg);
+        }}
+      >
+        <div
+          aria-label="Mermaid diagram, open enlarged"
+          className="markdown-diagram markdown-mermaid"
+          onClick={() => setEnlarged(true)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            setEnlarged(true);
+          }}
+          ref={container}
+          role="button"
+          tabIndex={0}
+        >
+          {renderSvgNode(rendered.root, 'svg')}
+        </div>
+      </CodeBlock>
+      {enlarged && (
+        <DiagramLightbox onClose={closeEnlarged}>
+          {renderSvgNode(rendered.root, 'lightbox')}
+        </DiagramLightbox>
+      )}
+    </>
+  );
+}
+
+/** Show a diagram at full width over the page; a backdrop click or Escape closes it. */
+function DiagramLightbox({
+  children,
+  onClose,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeButton.current?.focus();
+    const closeForEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeForEscape);
+    return () => window.removeEventListener('keydown', closeForEscape);
+  }, [onClose]);
+
+  return (
     <div
-      aria-label="Mermaid diagram"
-      className="markdown-diagram markdown-mermaid"
-      ref={container}
-      role="img"
+      className="diagram-lightbox-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      role="presentation"
     >
-      {renderSvgNode(rendered.root, 'svg')}
+      <div
+        aria-label="Enlarged diagram"
+        aria-modal="true"
+        className="diagram-lightbox"
+        role="dialog"
+      >
+        <button
+          aria-label="Close enlarged diagram"
+          className="diagram-lightbox-close"
+          onClick={onClose}
+          ref={closeButton}
+          type="button"
+        >
+          <svg aria-hidden="true" viewBox="0 0 16 16">
+            <path d="m4 4 8 8M12 4l-8 8" />
+          </svg>
+        </button>
+        {children}
+      </div>
     </div>
   );
 }

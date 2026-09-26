@@ -2285,6 +2285,16 @@ a.wiki-link-active {
 
 .markdown .markdown-mermaid {
   background: #fff;
+  cursor: zoom-in;
+}
+
+.markdown .code-block > .markdown-diagram {
+  margin: 0;
+}
+
+.markdown .markdown-mermaid:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
 }
 
 .markdown .markdown-mermaid svg {
@@ -2292,6 +2302,66 @@ a.wiki-link-active {
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+}
+
+.diagram-lightbox-backdrop {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  padding: 28px;
+  background: rgb(0 0 0 / 60%);
+  cursor: zoom-out;
+  inset: 0;
+  place-items: center;
+}
+
+.diagram-lightbox {
+  position: relative;
+  width: min(1600px, calc(100vw - 56px));
+  max-height: calc(100vh - 56px);
+  padding: 32px;
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 35%);
+  cursor: default;
+}
+
+.diagram-lightbox > svg {
+  display: block;
+  height: auto;
+  margin: 0 auto;
+}
+
+.diagram-lightbox-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  margin: -16px -16px 0 0;
+  padding: 0;
+  color: #555;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  place-items: center;
+}
+
+.diagram-lightbox-close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.diagram-lightbox-close:hover {
+  color: #111;
+  background: #f2f2f2;
 }
 
 .markdown .markdown-map {

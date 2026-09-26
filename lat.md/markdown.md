@@ -54,6 +54,8 @@ GitHub-style `mermaid` fences render as React-owned SVG trees in the browser thr
 
 The viewer parses Mermaid's SVG as inert HTML so multiline HTML labels retain their line breaks, then filters elements and properties before creating React nodes. [[tests/markdown-rich-fence.test.ts]] exercises rendering multiline labels.
 
+Diagrams sit on a white background, and a `layout: elk` frontmatter selects the ELK layout. Clicking a diagram opens it enlarged in a lightbox that a backdrop click or Escape closes. A Copy PNG button draws the rendered SVG onto a 2x canvas on white and writes it to the clipboard through [[view/src/markdown-rich-fences.ts#copySvgAsPng]].
+
 ## GeoJSON and TopoJSON Maps
 
 GitHub-style `geojson` and `topojson` fences render supplied geometry over an OpenStreetMap basemap from OpenFreeMap, with pan, zoom, and automatic data bounds.

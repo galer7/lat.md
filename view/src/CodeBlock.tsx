@@ -4,9 +4,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 export function CodeBlock({
   children,
   text,
+  write = () => navigator.clipboard.writeText(text),
+  copyLabel = 'Copy Code',
+  buttonText = 'Copy',
 }: {
   children: ReactNode;
   text: string;
+  /** Replaces the plain-text write, e.g. to copy a diagram as an image. */
+  write?: () => Promise<void>;
+  copyLabel?: string;
+  buttonText?: string;
 }) {
   const [result, setResult] = useState<{
     text: string;
@@ -21,7 +28,7 @@ export function CodeBlock({
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(text);
+      await write();
       setResult({ text, copied: true });
     } catch {
       setResult({ text, copied: false });
@@ -32,7 +39,7 @@ export function CodeBlock({
     ? currentResult.copied
       ? 'Copied!'
       : 'Copy failed. Try again.'
-    : 'Copy Code';
+    : copyLabel;
   return (
     <div className="code-block">
       {children}
@@ -61,7 +68,7 @@ export function CodeBlock({
             ? currentResult.copied
               ? 'Copied!'
               : 'Retry Copy'
-            : 'Copy'}
+            : buttonText}
         </span>
       </button>
       <span className="code-block-status" role="status">

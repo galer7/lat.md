@@ -80,6 +80,42 @@ export function nextMermaidDiagramId(): string {
   return `lat-mermaid-${mermaidDiagramId++}`;
 }
 
+/** Copy a rendered diagram to the clipboard as a PNG on a white background. */
+export function copySvgAsPng(svg: SVGSVGElement): Promise<void> {
+  // A pending Blob keeps the clipboard write inside the click's user gesture.
+  return navigator.clipboard.write([
+    new ClipboardItem({ 'image/png': svgToPng(svg) }),
+  ]);
+}
+
+async function svgToPng(svg: SVGSVGElement, scale = 2): Promise<Blob> {
+  const { width, height } = svg.viewBox.baseVal;
+  const copy = svg.cloneNode(true) as SVGSVGElement;
+  copy.setAttribute('width', String(width));
+  copy.setAttribute('height', String(height));
+  copy.removeAttribute('style');
+  const image = new Image();
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    new XMLSerializer().serializeToString(copy),
+  )}`;
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(width * scale);
+  canvas.height = Math.ceil(height * scale);
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas 2D is unavailable');
+  context.fillStyle = '#fff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(
+      (blob) =>
+        blob ? resolve(blob) : reject(new Error('PNG encoding failed')),
+      'image/png',
+    ),
+  );
+}
+
 export function richFenceErrorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
