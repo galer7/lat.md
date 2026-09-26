@@ -54,7 +54,21 @@ GitHub-style `mermaid` fences render as React-owned SVG trees in the browser thr
 
 The viewer parses Mermaid's SVG as inert HTML so multiline HTML labels retain their line breaks, then filters elements and properties before creating React nodes. [[tests/markdown-rich-fence.test.ts]] exercises rendering multiline labels.
 
-Diagrams sit on a white background, and a `layout: elk` frontmatter selects the ELK layout. Clicking a diagram opens it enlarged in a lightbox that a backdrop click or Escape closes. A Copy PNG button draws the rendered SVG onto a 2x canvas on white and writes it to the clipboard through [[view/src/markdown-rich-fences.ts#copySvgAsPng]].
+A `layout: elk` frontmatter selects the ELK layout.
+
+## PlantUML Diagrams
+
+`plantuml` and `puml` fences render on the server, so the live UI and the static export carry the same SVG and the browser needs no Java.
+
+[[src/view/markdown.ts#renderMarkdown]] renders each such fence through [[src/view/diagrams.ts#renderServerDiagram]] before building the tree, and attaches the SVG or the error to the fence. PlantUML runs in its SANDBOX profile: the bundled stdlib such as C4 loads, but `!include` cannot read local files or URLs. `LAT_PLANTUML` names the executable when `plantuml` is not on PATH. Output is cached per source for the life of the process. A missing executable or a syntax error shows its message above the source. [[tests/diagrams.test.ts]] covers the server path.
+
+The browser filters the SVG through the same element allowlist as Mermaid. Raster `data:image` URLs pass, since C4 embeds its icons that way; SVG data URLs do not.
+
+## Diagram Frame
+
+Every SVG diagram, whatever its language, shares one frame: a white background, a click-to-enlarge lightbox, and a Copy PNG button.
+
+The lightbox closes on a backdrop click or Escape, and the page behind it does not scroll. Copy PNG draws the rendered SVG onto a 2x canvas on white and writes it to the clipboard through [[view/src/markdown-rich-fences.ts#copySvgAsPng]].
 
 ## GeoJSON and TopoJSON Maps
 

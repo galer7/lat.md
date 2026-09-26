@@ -21,6 +21,13 @@ import type { AlertMarker } from '@lat.md/core/extensions/alert-marker';
 import type { WikiLink } from '@lat.md/core/extensions/wiki-link/types';
 import { parse } from '@lat.md/core/parser';
 import {
+  renderServerDiagram,
+  serverDiagramKind,
+  type ServerDiagram,
+  type ServerDiagramKind,
+  type ServerDiagramRenderer,
+} from './diagrams.js';
+import {
   decorateExternalSiteLinks,
   toViewDocumentTree,
 } from './document-tree.js';
@@ -49,6 +56,8 @@ export type MarkdownRenderOptions = {
     target: string;
   }[];
   lineOffset?: number;
+  /** Renders server-side diagram fences such as PlantUML; tests pass a fake. */
+  renderDiagram?: ServerDiagramRenderer;
   rewriteMarkdownLink?: (url: string) => string;
 };
 
@@ -74,6 +83,7 @@ const GEOJSON_SOURCE_CLASS = 'markdown-geojson-source';
 const HIGHLIGHT_CLASS = 'hljs';
 const MERMAID_SOURCE_CLASS = 'markdown-mermaid-source';
 const MATH_DIFF_BLOCK_CLASS = 'git-math-block';
+const PLANTUML_SOURCE_CLASS = 'markdown-plantuml-source';
 const RICH_FENCE_SOURCE_CLASS = 'markdown-diagram-source';
 const STL_SOURCE_CLASS = 'markdown-stl-source';
 const TOPOJSON_SOURCE_CLASS = 'markdown-topojson-source';
@@ -173,13 +183,19 @@ const sanitizeSchema: SanitizeSchema = {
     li: classAttributes('li'),
     ol: classAttributes('ol'),
     p: classAttributes('p', ALERT_CLASSES),
-    pre: classAttributes('pre', [
-      GEOJSON_SOURCE_CLASS,
-      MERMAID_SOURCE_CLASS,
-      RICH_FENCE_SOURCE_CLASS,
-      STL_SOURCE_CLASS,
-      TOPOJSON_SOURCE_CLASS,
-    ]),
+    pre: [
+      ...classAttributes('pre', [
+        GEOJSON_SOURCE_CLASS,
+        MERMAID_SOURCE_CLASS,
+        PLANTUML_SOURCE_CLASS,
+        RICH_FENCE_SOURCE_CLASS,
+        STL_SOURCE_CLASS,
+        TOPOJSON_SOURCE_CLASS,
+      ]),
+      // Server-rendered SVG; the browser filters it before rendering.
+      'dataDiagramSvg',
+      'dataDiagramError',
+    ],
     span: [
       ...(defaultSchema.attributes?.span ?? []),
       'ariaHidden',
@@ -218,7 +234,11 @@ const highlightedCodeHandler: RemarkCodeHandler = (state, rawNode) => {
           ? TOPOJSON_SOURCE_CLASS
           : language?.toLowerCase() === 'stl'
             ? STL_SOURCE_CLASS
-            : null;
+            : serverDiagramKind(language)
+              ? PLANTUML_SOURCE_CLASS
+              : null;
+  const diagram = (node.data as { diagram?: ServerDiagram } | undefined)
+    ?.diagram;
   const highlighted =
     language && !richSourceClass ? highlightCode(language, node.value) : null;
   const code = {
@@ -250,6 +270,10 @@ const highlightedCodeHandler: RemarkCodeHandler = (state, rawNode) => {
       className: richSourceClass
         ? [RICH_FENCE_SOURCE_CLASS, richSourceClass]
         : [],
+      ...(diagram && 'svg' in diagram ? { dataDiagramSvg: diagram.svg } : {}),
+      ...(diagram && 'error' in diagram
+        ? { dataDiagramError: diagram.error }
+        : {}),
     },
     children: [result],
   };
@@ -682,6 +706,21 @@ export async function renderMarkdown(
           value: `[[${node.value}${alias}]]`,
         } as RootContent);
   });
+
+  const diagramFences: { node: Code; kind: ServerDiagramKind }[] = [];
+  visit(tree, 'code', (node: Code) => {
+    const kind = serverDiagramKind(node.lang?.split(/\s+/, 1)[0]);
+    if (kind) diagramFences.push({ node, kind });
+  });
+  const renderDiagram = options.renderDiagram ?? renderServerDiagram;
+  await Promise.all(
+    diagramFences.map(async ({ node, kind }) => {
+      node.data = {
+        ...node.data,
+        diagram: await renderDiagram(kind, node.value),
+      } as Code['data'];
+    }),
+  );
 
   const hast = await documentTreeProcessor.run(tree);
   // Attach source ranges after sanitization, before positions are discarded.

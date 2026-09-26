@@ -2283,7 +2283,7 @@ a.wiki-link-active {
   border-radius: 10px;
 }
 
-.markdown .markdown-mermaid {
+.markdown .markdown-svg-diagram {
   background: #fff;
   cursor: zoom-in;
 }
@@ -2292,12 +2292,12 @@ a.wiki-link-active {
   margin: 0;
 }
 
-.markdown .markdown-mermaid:focus-visible {
+.markdown .markdown-svg-diagram:focus-visible {
   outline: 2px solid var(--link);
   outline-offset: 2px;
 }
 
-.markdown .markdown-mermaid svg {
+.markdown .markdown-svg-diagram svg {
   display: block;
   max-width: 100%;
   height: auto;

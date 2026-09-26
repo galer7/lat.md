@@ -17,6 +17,7 @@ import type {
 import {
   MarkdownRichFence,
   type MarkdownRichFenceKind,
+  type ServerRenderedDiagram,
 } from './MarkdownRichFence';
 import { copySectionId } from './section-back-references';
 import { CodeBlock } from './CodeBlock';
@@ -105,6 +106,17 @@ function documentNodeText(node: ViewDocumentNode): string {
   return node.children.map(documentNodeText).join('');
 }
 
+function serverRenderedDiagram(
+  node: ViewDocumentElement,
+): ServerRenderedDiagram | undefined {
+  const { dataDiagramSvg: svg, dataDiagramError: error } = node.properties;
+  if (typeof svg !== 'string' && typeof error !== 'string') return undefined;
+  return {
+    ...(typeof svg === 'string' ? { svg } : {}),
+    ...(typeof error === 'string' ? { error } : {}),
+  };
+}
+
 function richFenceKind(
   node: ViewDocumentElement,
 ): MarkdownRichFenceKind | null {
@@ -116,6 +128,7 @@ function richFenceKind(
       ? value.split(/\s+/)
       : [];
   if (classNames.includes('markdown-mermaid-source')) return 'mermaid';
+  if (classNames.includes('markdown-plantuml-source')) return 'plantuml';
   if (classNames.includes('markdown-geojson-source')) return 'geojson';
   if (classNames.includes('markdown-topojson-source')) return 'topojson';
   if (classNames.includes('markdown-stl-source')) return 'stl';
@@ -341,6 +354,7 @@ function DocumentElement({
         fallback={content}
         key={path}
         kind={fenceKind}
+        rendered={serverRenderedDiagram(node)}
         source={node.children.map(documentNodeText).join('')}
       />
     );

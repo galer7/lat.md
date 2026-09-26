@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -28,11 +29,20 @@ import {
   type ThreeModules,
 } from './markdown-rich-fences';
 
-export type MarkdownRichFenceKind = 'geojson' | 'mermaid' | 'stl' | 'topojson';
+export type MarkdownRichFenceKind =
+  | 'geojson'
+  | 'mermaid'
+  | 'plantuml'
+  | 'stl'
+  | 'topojson';
+
+/** What the server rendered for a server-side diagram fence such as PlantUML. */
+export type ServerRenderedDiagram = { svg?: string; error?: string };
 
 type RichFenceProps = {
   fallback: ReactNode;
   kind: MarkdownRichFenceKind;
+  rendered?: ServerRenderedDiagram;
   source: string;
 };
 
@@ -120,6 +130,8 @@ function svgPropertyName(name: string): string {
 }
 
 function safeSvgUrl(value: string): boolean {
+  // Raster data images are inert; PlantUML embeds C4 icons this way.
+  if (/^\s*data:image\/(?:png|gif|jpeg|webp);base64,/i.test(value)) return true;
   return !/^\s*(?:javascript|vbscript|data):/i.test(value);
 }
 
@@ -154,9 +166,10 @@ function svgNode(node: Node): SvgNode | null {
   };
 }
 
-export function parseMermaidSvg(source: string): SvgNode {
+export function parseDiagramSvg(source: string): SvgNode {
   // Mermaid serializes HTML labels inside foreignObject with HTML void tags
   // such as <br>. Parse as inert HTML, then apply our element/property filter.
+  // PlantUML's leading <?plantuml?> instruction parses as a comment.
   const parsed = new DOMParser().parseFromString(source, 'text/html');
   const element = parsed.body.firstElementChild;
   if (
@@ -165,11 +178,11 @@ export function parseMermaidSvg(source: string): SvgNode {
     element.namespaceURI !== 'http://www.w3.org/2000/svg' ||
     parsed.body.children.length !== 1
   ) {
-    throw new Error('Mermaid did not return an SVG document');
+    throw new Error('The diagram is not a single SVG document');
   }
   const root = svgNode(element);
   if (!root || root.type !== 'element' || root.tagName !== 'svg') {
-    throw new Error('Mermaid did not return an SVG document');
+    throw new Error('The diagram is not a single SVG document');
   }
   return root;
 }
@@ -194,7 +207,7 @@ function FenceError({
   fallback: ReactNode;
   label: string;
   message: string;
-  onRetry: () => void;
+  onRetry?: () => void;
 }) {
   return (
     <>
@@ -202,13 +215,15 @@ function FenceError({
         <span>
           Could not render {label}: {message}
         </span>
-        <button
-          className="markdown-diagram-retry"
-          onClick={onRetry}
-          type="button"
-        >
-          Retry
-        </button>
+        {onRetry && (
+          <button
+            className="markdown-diagram-retry"
+            onClick={onRetry}
+            type="button"
+          >
+            Retry
+          </button>
+        )}
       </div>
       {fallback}
     </>
@@ -216,10 +231,7 @@ function FenceError({
 }
 
 function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
-  const container = useRef<HTMLDivElement>(null);
   const [attempt, setAttempt] = useState(0);
-  const [enlarged, setEnlarged] = useState(false);
-  const closeEnlarged = useCallback(() => setEnlarged(false), []);
   const [error, setError] = useState('');
   const [rendered, setRendered] = useState<{
     bind?: (element: Element) => void;
@@ -235,7 +247,7 @@ function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
       .then((result) => {
         if (!active) return;
         setRendered({
-          root: parseMermaidSvg(result.svg),
+          root: parseDiagramSvg(result.svg),
           bind: result.bindFunctions,
         });
       })
@@ -246,10 +258,6 @@ function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
       active = false;
     };
   }, [attempt, source]);
-
-  useLayoutEffect(() => {
-    if (rendered?.bind && container.current) rendered.bind(container.current);
-  }, [rendered]);
 
   if (error) {
     return (
@@ -263,6 +271,102 @@ function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
   }
   if (!rendered) return fallback;
   return (
+    <DiagramFrame
+      bind={rendered.bind}
+      kind="mermaid"
+      label="Mermaid diagram"
+      root={rendered.root}
+      source={source}
+    />
+  );
+}
+
+/** PlantUML renders on the server; the browser only filters and frames its SVG. */
+function PlantUmlFence({
+  fallback,
+  rendered,
+  source,
+}: Omit<RichFenceProps, 'kind'>) {
+  const parsed = useMemo<{ root: SvgNode } | { error: string }>(() => {
+    if (!rendered?.svg)
+      return { error: rendered?.error ?? 'No SVG was rendered' };
+    try {
+      return { root: parseDiagramSvg(rendered.svg) };
+    } catch (reason) {
+      return { error: richFenceErrorMessage(reason) };
+    }
+  }, [rendered]);
+
+  if ('error' in parsed) {
+    return (
+      <FenceError
+        fallback={fallback}
+        label="PlantUML diagram"
+        message={parsed.error}
+      />
+    );
+  }
+  return (
+    <DiagramFrame
+      kind="plantuml"
+      label="PlantUML diagram"
+      root={parsed.root}
+      source={source}
+    />
+  );
+}
+
+/**
+ * Let the viewBox set the aspect ratio. PlantUML pins an inline height and
+ * `preserveAspectRatio="none"`, so a diagram narrowed to the column squashes.
+ */
+function scalableSvg(root: SvgNode): SvgNode {
+  if (root.type !== 'element') return root;
+  const { preserveAspectRatio, style, ...properties } = root.properties;
+  const kept =
+    style && typeof style === 'object'
+      ? Object.fromEntries(
+          Object.entries(style).filter(
+            ([name]) => name !== 'width' && name !== 'height',
+          ),
+        )
+      : style;
+  return {
+    ...root,
+    properties: {
+      ...properties,
+      ...(preserveAspectRatio && preserveAspectRatio !== 'none'
+        ? { preserveAspectRatio }
+        : {}),
+      ...(kept ? { style: kept } : {}),
+    },
+  };
+}
+
+/** Every SVG diagram gets a white frame, a Copy PNG button and a click-to-enlarge lightbox. */
+function DiagramFrame({
+  bind,
+  kind,
+  label,
+  root,
+  source,
+}: {
+  bind?: (element: Element) => void;
+  kind: MarkdownRichFenceKind;
+  label: string;
+  root: SvgNode;
+  source: string;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const [enlarged, setEnlarged] = useState(false);
+  const closeEnlarged = useCallback(() => setEnlarged(false), []);
+  const scalable = useMemo(() => scalableSvg(root), [root]);
+
+  useLayoutEffect(() => {
+    if (bind && container.current) bind(container.current);
+  }, [bind, root]);
+
+  return (
     <>
       <CodeBlock
         buttonText="Copy PNG"
@@ -275,8 +379,8 @@ function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
         }}
       >
         <div
-          aria-label="Mermaid diagram, open enlarged"
-          className="markdown-diagram markdown-mermaid"
+          aria-label={`${label}, open enlarged`}
+          className={`markdown-diagram markdown-svg-diagram markdown-${kind}`}
           onClick={() => setEnlarged(true)}
           onKeyDown={(event) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -287,12 +391,12 @@ function MermaidFence({ fallback, source }: Omit<RichFenceProps, 'kind'>) {
           role="button"
           tabIndex={0}
         >
-          {renderSvgNode(rendered.root, 'svg')}
+          {renderSvgNode(scalable, 'svg')}
         </div>
       </CodeBlock>
       {enlarged && (
         <DiagramLightbox onClose={closeEnlarged}>
-          {renderSvgNode(rendered.root, 'lightbox')}
+          {renderSvgNode(scalable, 'lightbox')}
         </DiagramLightbox>
       )}
     </>
@@ -670,6 +774,14 @@ export function MarkdownRichFence(props: RichFenceProps) {
   switch (props.kind) {
     case 'mermaid':
       return <MermaidFence fallback={props.fallback} source={props.source} />;
+    case 'plantuml':
+      return (
+        <PlantUmlFence
+          fallback={props.fallback}
+          rendered={props.rendered}
+          source={props.source}
+        />
+      );
     case 'geojson':
     case 'topojson':
       return <MapFence {...props} kind={props.kind} />;
