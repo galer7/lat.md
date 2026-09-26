@@ -101,6 +101,14 @@ describe('Markdown rich fences', () => {
       );
       expect(backdrop?.querySelector('.diagram-lightbox svg')).not.toBeNull();
 
+      // The page under the lightbox must not scroll.
+      const wheel = new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+      });
+      backdrop?.dispatchEvent(wheel);
+      expect(wheel.defaultPrevented).toBe(true);
+
       await act(async () =>
         backdrop?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })),
       );

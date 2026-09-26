@@ -2321,6 +2321,7 @@ a.wiki-link-active {
   max-height: calc(100vh - 56px);
   padding: 32px;
   overflow: auto;
+  overscroll-behavior: contain;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 24px 80px rgb(0 0 0 / 35%);

@@ -307,7 +307,31 @@ function DiagramLightbox({
   children: ReactNode;
   onClose: () => void;
 }) {
+  const backdrop = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const element = backdrop.current;
+    if (!element) return;
+    // React listens to wheel passively, so only a native listener can stop the
+    // page behind the lightbox from scrolling. The dialog scrolls when it can.
+    const keepScrollInside = (event: Event) => {
+      const box = dialog.current;
+      const scrollable =
+        box &&
+        (box.scrollHeight > box.clientHeight ||
+          box.scrollWidth > box.clientWidth);
+      if (scrollable && box.contains(event.target as Node)) return;
+      event.preventDefault();
+    };
+    element.addEventListener('wheel', keepScrollInside, { passive: false });
+    element.addEventListener('touchmove', keepScrollInside, { passive: false });
+    return () => {
+      element.removeEventListener('wheel', keepScrollInside);
+      element.removeEventListener('touchmove', keepScrollInside);
+    };
+  }, []);
 
   useEffect(() => {
     closeButton.current?.focus();
@@ -324,12 +348,14 @@ function DiagramLightbox({
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
+      ref={backdrop}
       role="presentation"
     >
       <div
         aria-label="Enlarged diagram"
         aria-modal="true"
         className="diagram-lightbox"
+        ref={dialog}
         role="dialog"
       >
         <button
