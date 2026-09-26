@@ -2283,6 +2283,10 @@ a.wiki-link-active {
   border-radius: 10px;
 }
 
+.markdown .markdown-mermaid {
+  background: #fff;
+}
+
 .markdown .markdown-mermaid svg {
   display: block;
   max-width: 100%;

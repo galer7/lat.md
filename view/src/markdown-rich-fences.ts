@@ -52,7 +52,11 @@ export const getTopoJson = recoverableLazyImport<TopoJsonModule>(
 );
 
 export const getMermaid = recoverableLazyImport(async () => {
-  const { default: mermaid } = await import('mermaid');
+  const [{ default: mermaid }, { default: elkLayouts }] = await Promise.all([
+    import('mermaid'),
+    import('@mermaid-js/layout-elk'),
+  ]);
+  mermaid.registerLayoutLoaders(elkLayouts);
   mermaid.initialize({
     maxTextSize: 50_000,
     securityLevel: 'strict',
